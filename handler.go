@@ -1,8 +1,8 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
+	"text/template"
 
 	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
 	log "github.com/sirupsen/logrus"
@@ -29,26 +29,21 @@ func (t *TestHandler) Init() error {
 func (t *TestHandler) ObjectCreated(obj interface{}) {
 	zone := obj.(*v1.Zone)
 
-	zoneFile, err := os.OpenFile("/tmp/zones", os.O_APPEND|os.O_WRONLY, 0600)
+	corednsTemplate, _ := template.ParseFiles("coredns.tmpl")
+
+	file, err := os.OpenFile("/tmp/corednsconf", os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		log.Infof("error opening file: %v", err)
-		d1 := []byte(zone.Spec.ZoneName + "\n")
-		err := ioutil.WriteFile("/tmp/zones", d1, 0644)
-		log.Infof("creating file")
-		if err != nil {
-			log.Errorf("error creating file: %v", err)
-		}
-		return
+		log.Fatalf("failed opening file: %s", err)
 	}
 
-	defer zoneFile.Close()
-
-	log.Info("appending file")
-	if _, err = zoneFile.WriteString(zone.Spec.ZoneName + "\n"); err != nil {
-		log.Errorf("error appending file: %v", err)
+	err = corednsTemplate.Execute(file, zone.Spec.ZoneName)
+	if err != nil {
+		log.Errorf("error executing template: %v", err)
 	}
 
-	log.Info("TestHandler.ObjectCreated")
+	defer file.Close()
+
+	log.Infof("zone %s added to coredns configuration file", zone.Spec.ZoneName)
 }
 
 // ObjectDeleted is called when an object is deleted

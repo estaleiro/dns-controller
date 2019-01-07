@@ -98,6 +98,19 @@ func main() {
 		},
 	})
 
+	// check if core dns config file exists and remove it
+	if _, err := os.Stat("/tmp/corednsconf"); !os.IsNotExist(err) {
+		err = os.Remove("/tmp/corednsconf")
+		if err != nil {
+			log.Errorf("error deleting coredns configuration file: %v", err)
+		}
+	}
+	// then create a new empty file
+	_, err := os.Create("/tmp/corednsconf")
+	if err != nil {
+		log.Errorf("error creating coredns configuration file: %v", err)
+	}
+
 	// construct the Controller object which has all of the necessary components to
 	// handle logging, connections, informing (listing and watching), the queue,
 	// and the handler
@@ -123,4 +136,3 @@ func main() {
 	signal.Notify(sigTerm, syscall.SIGINT)
 	<-sigTerm
 }
-
