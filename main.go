@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/namsral/flag"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -98,18 +99,12 @@ func main() {
 		},
 	})
 
-	// check if core dns config file exists and remove it
-	if _, err := os.Stat("/tmp/corednsconf"); !os.IsNotExist(err) {
-		err = os.Remove("/tmp/corednsconf")
-		if err != nil {
-			log.Errorf("error deleting coredns configuration file: %v", err)
-		}
-	}
-	// then create a new empty file
-	_, err := os.Create("/tmp/corednsconf")
-	if err != nil {
-		log.Errorf("error creating coredns configuration file: %v", err)
-	}
+	// Get zone directory
+	var zoneDirectory string
+	flagSet := flag.NewFlagSetWithEnvPrefix(os.Args[0], "COREDNS", 0)
+	flagSet.StringVar(&zoneDirectory, "zone_dir", "/tmp/zones/", "coredns zones directory path")
+	flagSet.Parse(os.Args[1:])
+	log.Infof("zone_dir: %s", zoneDirectory)
 
 	// construct the Controller object which has all of the necessary components to
 	// handle logging, connections, informing (listing and watching), the queue,
@@ -119,7 +114,7 @@ func main() {
 		clientset: client,
 		informer:  informer,
 		queue:     queue,
-		handler:   &TestHandler{},
+		handler:   &CoreDNSHandler{zoneDirectory: zoneDirectory},
 	}
 
 	// use a channel to synchronize the finalization for a graceful shutdown

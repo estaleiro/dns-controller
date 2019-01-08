@@ -16,25 +16,38 @@ type Handler interface {
 	ObjectUpdated(objOld, objNew interface{})
 }
 
-// TestHandler is a sample implementation of Handler
-type TestHandler struct{}
+// CoreDNSHandler is a sample implementation of Handler
+type CoreDNSHandler struct {
+	zoneDirectory string
+}
 
 // Init handles any handler initialization
-func (t *TestHandler) Init() error {
-	log.Info("TestHandler.Init")
+func (t *CoreDNSHandler) Init() error {
+	log.Info("CoreDNSHandler.Init")
 	return nil
 }
 
 // ObjectCreated is called when an object is created
-func (t *TestHandler) ObjectCreated(obj interface{}) {
+func (t *CoreDNSHandler) ObjectCreated(obj interface{}) {
 	zone := obj.(*v1.Zone)
 
-	corednsTemplate, _ := template.ParseFiles("coredns.tmpl")
+	zoneFile := t.zoneDirectory + "/" + zone.Spec.ZoneName
 
-	file, err := os.OpenFile("/tmp/corednsconf", os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatalf("failed opening file: %s", err)
+	// check if zone file exists and remove it
+	if _, err := os.Stat(zoneFile); !os.IsNotExist(err) {
+		err = os.Remove(zoneFile)
+		if err != nil {
+			log.Errorf("error deleting zone file: %v", err)
+		}
 	}
+
+	// then create a new empty file
+	file, err := os.Create(zoneFile)
+	if err != nil {
+		log.Errorf("error creating zone file: %v", err)
+	}
+
+	corednsTemplate, _ := template.ParseFiles("coredns.tmpl")
 
 	err = corednsTemplate.Execute(file, zone.Spec.ZoneName)
 	if err != nil {
@@ -43,15 +56,17 @@ func (t *TestHandler) ObjectCreated(obj interface{}) {
 
 	defer file.Close()
 
-	log.Infof("zone %s added to coredns configuration file", zone.Spec.ZoneName)
+	log.Infof("zone %s added", zone.Spec.ZoneName)
 }
 
 // ObjectDeleted is called when an object is deleted
-func (t *TestHandler) ObjectDeleted(obj interface{}) {
-	log.Info("TestHandler.ObjectDeleted")
+func (t *CoreDNSHandler) ObjectDeleted(obj interface{}) {
+	zone := obj.(*v1.Zone)
+	log.Infof("zone %s deleted", zone.Spec.ZoneName)
 }
 
 // ObjectUpdated is called when an object is updated
-func (t *TestHandler) ObjectUpdated(objOld, objNew interface{}) {
-	log.Info("TestHandler.ObjectUpdated")
+func (t *CoreDNSHandler) ObjectUpdated(objOld, objNew interface{}) {
+	zone := objOld.(*v1.Zone)
+	log.Infof("zone %s updated", zone.Spec.ZoneName)
 }
