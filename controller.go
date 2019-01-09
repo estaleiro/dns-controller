@@ -16,11 +16,12 @@ import (
 // logging, client connectivity, informing (list and watching)
 // queueing, and handling of resource changes
 type Controller struct {
-	logger    *log.Entry
-	clientset kubernetes.Interface
-	queue     workqueue.RateLimitingInterface
-	informer  cache.SharedIndexInformer
-	handler   Handler
+	logger         *log.Entry
+	clientset      kubernetes.Interface
+	queue          workqueue.RateLimitingInterface
+	informer       cache.SharedIndexInformer
+	handler        Handler
+	deletedIndexer cache.Indexer
 }
 
 // Run is the main path of execution for the controller loop
@@ -118,8 +119,18 @@ func (c *Controller) processNextItem() bool {
 	// after both instances, we want to forget the key from the queue, as this indicates
 	// a code path of successful queue key processing
 	if !exists {
+		itemDeleted, existsDeleted, err := c.deletedIndexer.GetByKey(keyRaw)
+
+		if err != nil || !existsDeleted {
+			c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
+			c.deletedIndexer.Delete(key)
+			c.queue.Forget(key)
+			utilruntime.HandleError(err)
+		}
+
 		c.logger.Infof("Controller.processNextItem: object deleted detected: %s", keyRaw)
-		c.handler.ObjectDeleted(item)
+		c.handler.ObjectDeleted(itemDeleted)
+		c.deletedIndexer.Delete(key)
 		c.queue.Forget(key)
 	} else {
 		c.logger.Infof("Controller.processNextItem: object created detected: %s", keyRaw)

@@ -63,6 +63,8 @@ func main() {
 	// so that it can be handled in the handler
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 
+	deletedIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+
 	// add event handlers to handle the three types of events for resources:
 	//  - adding new resources
 	//  - updating existing resources
@@ -94,6 +96,7 @@ func main() {
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			log.Infof("Delete zone: %s", key)
 			if err == nil {
+				deletedIndexer.Add(obj)
 				queue.Add(key)
 			}
 		},
@@ -110,11 +113,12 @@ func main() {
 	// handle logging, connections, informing (listing and watching), the queue,
 	// and the handler
 	controller := Controller{
-		logger:    log.NewEntry(log.New()),
-		clientset: client,
-		informer:  informer,
-		queue:     queue,
-		handler:   &CoreDNSHandler{zoneDirectory: zoneDirectory},
+		logger:         log.NewEntry(log.New()),
+		clientset:      client,
+		informer:       informer,
+		queue:          queue,
+		handler:        &CoreDNSHandler{zoneDirectory: zoneDirectory},
+		deletedIndexer: deletedIndexer,
 	}
 
 	// use a channel to synchronize the finalization for a graceful shutdown

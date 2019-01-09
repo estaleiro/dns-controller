@@ -62,11 +62,27 @@ func (t *CoreDNSHandler) ObjectCreated(obj interface{}) {
 // ObjectDeleted is called when an object is deleted
 func (t *CoreDNSHandler) ObjectDeleted(obj interface{}) {
 	zone := obj.(*v1.Zone)
+
+	zoneFile := t.zoneDirectory + "/" + zone.Spec.ZoneName
+
+	// check if zone file exists and remove it
+	if _, err := os.Stat(zoneFile); !os.IsNotExist(err) {
+		err = os.Remove(zoneFile)
+		if err != nil {
+			log.Errorf("error deleting zone file: %v", err)
+		}
+	}
+
 	log.Infof("zone %s deleted", zone.Spec.ZoneName)
 }
 
 // ObjectUpdated is called when an object is updated
 func (t *CoreDNSHandler) ObjectUpdated(objOld, objNew interface{}) {
 	zone := objOld.(*v1.Zone)
+
+	t.ObjectDeleted(objOld)
+
+	t.ObjectCreated(objNew)
+
 	log.Infof("zone %s updated", zone.Spec.ZoneName)
 }
