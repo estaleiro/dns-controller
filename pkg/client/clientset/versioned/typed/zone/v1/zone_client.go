@@ -27,12 +27,17 @@ import (
 
 type DnscontrollerV1Interface interface {
 	RESTClient() rest.Interface
+	RecordsGetter
 	ZonesGetter
 }
 
 // DnscontrollerV1Client is used to interact with features provided by the dnscontroller.k8s.io group.
 type DnscontrollerV1Client struct {
 	restClient rest.Interface
+}
+
+func (c *DnscontrollerV1Client) Records(namespace string) RecordInterface {
+	return newRecords(c, namespace)
 }
 
 func (c *DnscontrollerV1Client) Zones(namespace string) ZoneInterface {

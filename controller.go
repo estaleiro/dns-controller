@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/labels"
+
+	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
+	listers "github.com/estaleiro/dns-controller/pkg/client/listers/zone/v1"
 	log "github.com/sirupsen/logrus"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -16,16 +20,22 @@ import (
 // logging, client connectivity, informing (list and watching)
 // queueing, and handling of resource changes
 type Controller struct {
-	logger         *log.Entry
-	clientset      kubernetes.Interface
-	queue          workqueue.RateLimitingInterface
-	informer       cache.SharedIndexInformer
-	handler        Handler
-	deletedIndexer cache.Indexer
+	logger               *log.Entry
+	clientset            kubernetes.Interface
+	queue                workqueue.RateLimitingInterface
+	zoneInformer         cache.SharedIndexInformer
+	zoneLister           listers.ZoneLister
+	recordInformer       cache.SharedIndexInformer
+	recordLister         listers.RecordLister
+	zoneHandler          Handler
+	recordHandler        Handler
+	zoneDeletedIndexer   cache.Indexer
+	recordDeletedIndexer cache.Indexer
 }
 
 // Run is the main path of execution for the controller loop
 func (c *Controller) Run(stopCh <-chan struct{}) {
+
 	// handle a panic with logging and exiting
 	defer utilruntime.HandleCrash()
 	// ignore new items in the queue but when all goroutines
@@ -35,7 +45,8 @@ func (c *Controller) Run(stopCh <-chan struct{}) {
 	c.logger.Info("Controller.Run: initiating")
 
 	// run the informer to start listing and watching resources
-	go c.informer.Run(stopCh)
+	go c.zoneInformer.Run(stopCh)
+	go c.recordInformer.Run(stopCh)
 
 	// do the initial synchronization (one time) to populate resources
 	if !cache.WaitForCacheSync(stopCh, c.HasSynced) {
@@ -51,7 +62,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) {
 // HasSynced allows us to satisfy the Controller interface
 // by wiring up the informer's HasSynced method to it
 func (c *Controller) HasSynced() bool {
-	return c.informer.HasSynced()
+	return c.zoneInformer.HasSynced() && c.recordInformer.HasSynced()
 }
 
 // runWorker executes the loop to process new items added to the queue
@@ -73,9 +84,6 @@ func (c *Controller) runWorker() {
 func (c *Controller) processNextItem() bool {
 	log.Info("Controller.processNextItem: start")
 
-	// fetch the next item (blocking) from the queue to process or
-	// if a shutdown is requested then return out of this to stop
-	// processing
 	key, quit := c.queue.Get()
 
 	// stop the worker loop from running as this indicates we
@@ -85,59 +93,211 @@ func (c *Controller) processNextItem() bool {
 		return false
 	}
 
-	defer c.queue.Done(key)
+	// We wrap this block in a func so we can defer c.workqueue.Done.
+	err := func(obj interface{}) error {
+		// We call Done here so the workqueue knows we have finished
+		// processing this item. We also must remember to call Forget if we
+		// do not want this work item being re-queued. For example, we do
+		// not call Forget if a transient error occurs, instead the item is
+		// put back on the workqueue and attempted again after a back-off
+		// period.
+		defer c.queue.Done(obj)
 
-	// assert the string out of the key (format `namespace/name`)
-	keyRaw := key.(string)
+		var dnsResource DnsResource
+		var ok bool
 
-	// take the string key and get the object out of the indexer
-	//
-	// item will contain the complex object for the resource and
-	// exists is a bool that'll indicate whether or not the
-	// resource was created (true) or deleted (false)
-	//
-	// if there is an error in getting the key from the index
-	// then we want to retry this particular queue key a certain
-	// number of times (5 here) before we forget the queue key
-	// and throw an error
-	item, exists, err := c.informer.GetIndexer().GetByKey(keyRaw)
+		if dnsResource, ok = obj.(DnsResource); !ok {
+			c.queue.Forget(obj)
+			c.logger.Errorf("expected string in workqueue but got %#v", obj)
+			return nil
+		}
+
+		if err := c.syncZoneHandler(dnsResource.Key); err != nil {
+			c.queue.AddRateLimited(dnsResource)
+			c.logger.Errorf("error syncing '%s': %s, requeuing", dnsResource.Key, err.Error())
+			return err
+		}
+
+		c.logger.Infof("Successfully synced '%s'", dnsResource.Key)
+		return nil
+	}(key)
+
 	if err != nil {
-		if c.queue.NumRequeues(key) < 5 {
-			c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, retrying", key, err)
-			c.queue.AddRateLimited(key)
+		utilruntime.HandleError(err)
+		return true
+	}
+
+	/*
+		if keyRaw.Type == Zone {
+			// assert the string out of the key (format `namespace/name`)
+			zoneKeyRaw := keyRaw.Key
+
+			// take the string key and get the object out of the indexer
+			//
+			// item will contain the complex object for the resource and
+			// exists is a bool that'll indicate whether or not the
+			// resource was created (true) or deleted (false)
+			//
+			// if there is an error in getting the key from the index
+			// then we want to retry this particular queue key a certain
+			// number of times (5 here) before we forget the queue key
+			// and throw an error
+			zoneItem, zoneExists, err := c.zoneInformer.GetIndexer().GetByKey(zoneKeyRaw)
+			if err != nil {
+				if c.queue.NumRequeues(key) < 5 {
+					c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, retrying", key, err)
+					c.queue.AddRateLimited(key)
+				} else {
+					c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
+					c.queue.Forget(key)
+					utilruntime.HandleError(err)
+				}
+			}
+
+			// if the item doesn't exist then it was deleted and we need to fire off the handler's
+			// ObjectDeleted method. but if the object does exist that indicates that the object
+			// was created (or updated) so run the ObjectCreated method
+			//
+			// after both instances, we want to forget the key from the queue, as this indicates
+			// a code path of successful queue key processing
+			if !zoneExists {
+				zoneItemDeleted, zoneExistsDeleted, err := c.zoneDeletedIndexer.GetByKey(zoneKeyRaw)
+
+				if err != nil || !zoneExistsDeleted {
+					c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
+					c.zoneDeletedIndexer.Delete(key)
+					c.queue.Forget(key)
+					utilruntime.HandleError(err)
+				}
+
+				c.logger.Infof("Controller.processNextItem: object deleted detected: %s", zoneKeyRaw)
+				c.zoneHandler.ObjectDeleted(zoneItemDeleted)
+				c.zoneDeletedIndexer.Delete(key)
+				c.queue.Forget(key)
+			} else {
+				c.logger.Infof("Controller.processNextItem: object created detected: %s", zoneKeyRaw)
+				c.zoneHandler.ObjectCreated(zoneItem)
+				c.queue.Forget(key)
+			}
+
 		} else {
-			c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
-			c.queue.Forget(key)
-			utilruntime.HandleError(err)
-		}
-	}
+			// assert the string out of the key (format `namespace/name`)
+			recordKeyRaw := keyRaw.Key
 
-	// if the item doesn't exist then it was deleted and we need to fire off the handler's
-	// ObjectDeleted method. but if the object does exist that indicates that the object
-	// was created (or updated) so run the ObjectCreated method
-	//
-	// after both instances, we want to forget the key from the queue, as this indicates
-	// a code path of successful queue key processing
-	if !exists {
-		itemDeleted, existsDeleted, err := c.deletedIndexer.GetByKey(keyRaw)
+			// take the string key and get the object out of the indexer
+			//
+			// item will contain the complex object for the resource and
+			// exists is a bool that'll indicate whether or not the
+			// resource was created (true) or deleted (false)
+			//
+			// if there is an error in getting the key from the index
+			// then we want to retry this particular queue key a certain
+			// number of times (5 here) before we forget the queue key
+			// and throw an error
+			recordItem, recordExists, err := c.recordInformer.GetIndexer().GetByKey(recordKeyRaw)
+			if err != nil {
+				if c.queue.NumRequeues(key) < 5 {
+					c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, retrying", key, err)
+					c.queue.AddRateLimited(key)
+				} else {
+					c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
+					c.queue.Forget(key)
+					utilruntime.HandleError(err)
+				}
+			}
 
-		if err != nil || !existsDeleted {
-			c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
-			c.deletedIndexer.Delete(key)
-			c.queue.Forget(key)
-			utilruntime.HandleError(err)
-		}
+			// if the item doesn't exist then it was deleted and we need to fire off the handler's
+			// ObjectDeleted method. but if the object does exist that indicates that the object
+			// was created (or updated) so run the ObjectCreated method
+			//
+			// after both instances, we want to forget the key from the queue, as this indicates
+			// a code path of successful queue key processing
+			if !recordExists {
+				recordItemDeleted, recordExistsDeleted, err := c.recordDeletedIndexer.GetByKey(recordKeyRaw)
 
-		c.logger.Infof("Controller.processNextItem: object deleted detected: %s", keyRaw)
-		c.handler.ObjectDeleted(itemDeleted)
-		c.deletedIndexer.Delete(key)
-		c.queue.Forget(key)
-	} else {
-		c.logger.Infof("Controller.processNextItem: object created detected: %s", keyRaw)
-		c.handler.ObjectCreated(item)
-		c.queue.Forget(key)
-	}
+				if err != nil || !recordExistsDeleted {
+					c.logger.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
+					c.recordDeletedIndexer.Delete(key)
+					c.queue.Forget(key)
+					utilruntime.HandleError(err)
+				}
+
+				c.logger.Infof("Controller.processNextItem: object deleted detected: %s", recordKeyRaw)
+				c.recordHandler.ObjectDeleted(recordItemDeleted)
+				c.recordDeletedIndexer.Delete(key)
+				c.queue.Forget(key)
+			} else {
+				c.logger.Infof("Controller.processNextItem: object created detected: %s", recordKeyRaw)
+				c.recordHandler.ObjectCreated(recordItem)
+				c.queue.Forget(key)
+			}
+		}*/
 
 	// keep the worker loop running by returning true
 	return true
+}
+
+func (c *Controller) syncZoneHandler(key string) error {
+	// Convert the namespace/name string into a distinct namespace and name
+	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("Controller.syncZoneHandler: invalid resource key %s", key))
+		return nil
+	}
+
+	zoneItem, zoneExists, err := c.zoneInformer.GetIndexer().GetByKey(key)
+	if err != nil {
+		if c.queue.NumRequeues(key) < 5 {
+			c.logger.Errorf("Controller.syncZoneHandler: Failed processing item with key %s with error %v, retrying", key, err)
+			c.queue.AddRateLimited(key)
+		} else {
+			c.logger.Errorf("Controller.syncZoneHandler: Failed processing item with key %s with error %v, no more retries", key, err)
+			c.queue.Forget(key)
+			return err
+		}
+	}
+
+	if !zoneExists {
+		zoneItemDeleted, zoneExistsDeleted, err := c.zoneDeletedIndexer.GetByKey(key)
+
+		if err != nil || !zoneExistsDeleted {
+			c.logger.Errorf("Controller.syncZoneHandler: Failed processing item with key %s with error %v, no more retries", key, err)
+			c.zoneDeletedIndexer.Delete(key)
+			c.queue.Forget(key)
+			return err
+		}
+
+		c.logger.Infof("Controller.syncZoneHandler: object deleted detected: %s", key)
+		c.zoneHandler.ObjectDeleted(zoneItemDeleted)
+		c.zoneDeletedIndexer.Delete(key)
+		c.queue.Forget(key)
+	} else {
+		// Get all the zones
+		zones, err := c.zoneLister.Zones(namespace).List(labels.Everything())
+		if err != nil {
+			c.logger.Errorf("Controller.syncZoneHandler: Failed processing item with key %s with error %v, no more retries", key, err)
+			return err
+		}
+
+		zoneToCreate := zoneItem.(*v1.Zone)
+
+		// check if exists multiple crd asking to create same ZoneName
+		for _, zoneFound := range zones {
+			if zoneFound.Spec.ZoneName == zoneToCreate.Spec.ZoneName && zoneFound.GetObjectMeta().GetName() != zoneToCreate.GetObjectMeta().GetName() {
+				c.logger.Infof("Controller.syncZoneHandler: object found %v and object received %v asked to create same zone %v",
+					zoneFound.GetNamespace()+"/"+zoneFound.GetObjectMeta().GetName(), namespace+"/"+name, zoneToCreate.Spec.ZoneName)
+				// if we found a older crd
+				if zoneToCreate.GetCreationTimestamp().After(zoneFound.GetCreationTimestamp().Time) {
+					// then we use zoneFound
+					zoneToCreate = zoneFound
+				}
+			}
+		}
+
+		c.logger.Infof("Controller.syncZoneHandler: object created detected: %v", zoneToCreate)
+		//c.zoneHandler.ObjectCreated(zoneToCreate)
+		c.queue.Forget(key)
+	}
+
+	return nil
 }

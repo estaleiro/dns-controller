@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"text/template"
+	"time"
 
 	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
 	log "github.com/sirupsen/logrus"
@@ -16,26 +17,29 @@ type Handler interface {
 	ObjectUpdated(objOld, objNew interface{})
 }
 
-// CoreDNSHandler is a sample implementation of Handler
-type CoreDNSHandler struct {
+// ZoneHandler is a sample implementation of Handler
+type ZoneHandler struct {
 	zoneDirectory string
 }
 
 // Init handles any handler initialization
-func (t *CoreDNSHandler) Init() error {
-	log.Info("CoreDNSHandler.Init")
+func (t *ZoneHandler) Init() error {
+	log.Info("ZoneHandler.Init")
 	return nil
 }
 
 // ObjectCreated is called when an object is created
-func (t *CoreDNSHandler) ObjectCreated(obj interface{}) {
+func (t *ZoneHandler) ObjectCreated(obj interface{}) {
 	zone := obj.(*v1.Zone)
 
-	zoneFile := t.zoneDirectory + "/" + zone.Spec.ZoneName
+	// namespace_object_zone
+	fileName := zone.GetNamespace() + "_" + zone.GetObjectMeta().GetName() + "_" + zone.Spec.ZoneName
 
+	zoneFile := t.zoneDirectory + "/" + fileName
 	// check if zone file exists and remove it
 	if _, err := os.Stat(zoneFile); !os.IsNotExist(err) {
 		err = os.Remove(zoneFile)
+		log.Infof("deleting zone file: %v", zoneFile)
 		if err != nil {
 			log.Errorf("error deleting zone file: %v", err)
 		}
@@ -56,11 +60,11 @@ func (t *CoreDNSHandler) ObjectCreated(obj interface{}) {
 
 	defer file.Close()
 
-	log.Infof("zone %s added", zone.Spec.ZoneName)
+	log.Infof("%v - zone %s added", time.Now().Format("20060102150405"), zone.Spec.ZoneName)
 }
 
 // ObjectDeleted is called when an object is deleted
-func (t *CoreDNSHandler) ObjectDeleted(obj interface{}) {
+func (t *ZoneHandler) ObjectDeleted(obj interface{}) {
 	zone := obj.(*v1.Zone)
 
 	zoneFile := t.zoneDirectory + "/" + zone.Spec.ZoneName
@@ -77,7 +81,7 @@ func (t *CoreDNSHandler) ObjectDeleted(obj interface{}) {
 }
 
 // ObjectUpdated is called when an object is updated
-func (t *CoreDNSHandler) ObjectUpdated(objOld, objNew interface{}) {
+func (t *ZoneHandler) ObjectUpdated(objOld, objNew interface{}) {
 	zone := objOld.(*v1.Zone)
 
 	t.ObjectDeleted(objOld)
@@ -85,4 +89,30 @@ func (t *CoreDNSHandler) ObjectUpdated(objOld, objNew interface{}) {
 	t.ObjectCreated(objNew)
 
 	log.Infof("zone %s updated", zone.Spec.ZoneName)
+}
+
+// RecordHandler is a sample implementation of Handler
+type RecordHandler struct {
+	zoneDirectory string
+}
+
+// Init handles any handler initialization
+func (t *RecordHandler) Init() error {
+	log.Info("RecordHandler.Init")
+	return nil
+}
+
+// ObjectCreated is called when an object is created
+func (t *RecordHandler) ObjectCreated(obj interface{}) {
+	log.Info("record added")
+}
+
+// ObjectDeleted is called when an object is deleted
+func (t *RecordHandler) ObjectDeleted(obj interface{}) {
+	log.Infof("record deleted")
+}
+
+// ObjectUpdated is called when an object is updated
+func (t *RecordHandler) ObjectUpdated(objOld, objNew interface{}) {
+	log.Info("record updated")
 }

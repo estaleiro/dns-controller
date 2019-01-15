@@ -33,6 +33,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		SchemeGroupVersion,
 		&Zone{},
 		&ZoneList{},
+		&Record{},
+		&RecordList{},
 	)
 
 	// register the type in the scheme

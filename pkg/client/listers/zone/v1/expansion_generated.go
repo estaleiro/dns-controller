@@ -18,6 +18,14 @@ limitations under the License.
 
 package v1
 
+// RecordListerExpansion allows custom methods to be added to
+// RecordLister.
+type RecordListerExpansion interface{}
+
+// RecordNamespaceListerExpansion allows custom methods to be added to
+// RecordNamespaceLister.
+type RecordNamespaceListerExpansion interface{}
+
 // ZoneListerExpansion allows custom methods to be added to
 // ZoneLister.
 type ZoneListerExpansion interface{}

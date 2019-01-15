@@ -15,20 +15,21 @@ import (
 
 	zoneclientset "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned"
 	zoneinformerv1 "github.com/estaleiro/dns-controller/pkg/client/informers/externalversions/zone/v1"
+	listers "github.com/estaleiro/dns-controller/pkg/client/listers/zone/v1"
+
+	recordclientset "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned"
+	recordinformerv1 "github.com/estaleiro/dns-controller/pkg/client/informers/externalversions/zone/v1"
 )
 
 // retrieve the Kubernetes cluster client from outside of the cluster
-func getKubernetesClient() (kubernetes.Interface, zoneclientset.Interface) {
-	// construct the path to resolve to `~/.kube/config`
+func getKubernetesClient() (kubernetes.Interface, zoneclientset.Interface, recordclientset.Interface) {
 	kubeConfigPath := os.Getenv("HOME") + "/.kube/config"
 
-	// create the config from the path
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
 		log.Fatalf("getClusterConfig: %v", err)
 	}
 
-	// generate the client based off of the config
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Fatalf("getClusterConfig: %v", err)
@@ -39,20 +40,31 @@ func getKubernetesClient() (kubernetes.Interface, zoneclientset.Interface) {
 		log.Fatalf("getClusterConfig: %v", err)
 	}
 
+	recordClient, err := recordclientset.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("getClusterConfig: %v", err)
+	}
+
 	log.Info("Successfully constructed k8s client")
-	return client, zoneClient
+	return client, zoneClient, recordClient
 }
 
-// main code path
 func main() {
 	// get the Kubernetes client for connectivity
-	client, zoneClient := getKubernetesClient()
+	client, zoneClient, recordClient := getKubernetesClient()
 
 	// retrieve our custom resource informer which was generated from
 	// the code generator and pass it the custom resource client, specifying
 	// we should be looking through all namespaces for listing and watching
-	informer := zoneinformerv1.NewZoneInformer(
+	zoneInformer := zoneinformerv1.NewZoneInformer(
 		zoneClient,
+		metav1.NamespaceAll,
+		0,
+		cache.Indexers{},
+	)
+
+	recordInformer := recordinformerv1.NewRecordInformer(
+		recordClient,
 		metav1.NamespaceAll,
 		0,
 		cache.Indexers{},
@@ -63,13 +75,9 @@ func main() {
 	// so that it can be handled in the handler
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 
-	deletedIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+	zoneDeletedIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
 
-	// add event handlers to handle the three types of events for resources:
-	//  - adding new resources
-	//  - updating existing resources
-	//  - deleting resources
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	zoneInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			// convert the resource object into a key (in this case
 			// we are just doing it in the format of 'namespace/name')
@@ -77,14 +85,14 @@ func main() {
 			log.Infof("Add zone: %s", key)
 			if err == nil {
 				// add the key to the queue for the handler to get
-				queue.Add(key)
+				queue.Add(DnsResource{Key: key, Type: Zone})
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(newObj)
 			log.Infof("Update zone: %s", key)
 			if err == nil {
-				queue.Add(key)
+				queue.Add(DnsResource{Key: key, Type: Zone})
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -96,8 +104,42 @@ func main() {
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			log.Infof("Delete zone: %s", key)
 			if err == nil {
-				deletedIndexer.Add(obj)
-				queue.Add(key)
+				zoneDeletedIndexer.Add(obj)
+				queue.Add(DnsResource{Key: key, Type: Zone})
+			}
+		},
+	})
+
+	recordDeletedIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+
+	recordInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			// convert the resource object into a key (in this case
+			// we are just doing it in the format of 'namespace/name')
+			key, err := cache.MetaNamespaceKeyFunc(obj)
+			log.Infof("Add record: %s", key)
+			if err == nil {
+				queue.Add(DnsResource{Key: key, Type: Record})
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			key, err := cache.MetaNamespaceKeyFunc(newObj)
+			log.Infof("Update record: %s", key)
+			if err == nil {
+				queue.Add(DnsResource{Key: key, Type: Record})
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			// DeletionHandlingMetaNamsespaceKeyFunc is a helper function that allows
+			// us to check the DeletedFinalStateUnknown existence in the event that
+			// a resource was deleted but it is still contained in the index
+			//
+			// this then in turn calls MetaNamespaceKeyFunc
+			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+			log.Infof("Delete record: %s", key)
+			if err == nil {
+				recordDeletedIndexer.Add(obj)
+				queue.Add(DnsResource{Key: key, Type: Record})
 			}
 		},
 	})
@@ -109,16 +151,18 @@ func main() {
 	flagSet.Parse(os.Args[1:])
 	log.Infof("zone_dir: %s", zoneDirectory)
 
-	// construct the Controller object which has all of the necessary components to
-	// handle logging, connections, informing (listing and watching), the queue,
-	// and the handler
 	controller := Controller{
-		logger:         log.NewEntry(log.New()),
-		clientset:      client,
-		informer:       informer,
-		queue:          queue,
-		handler:        &CoreDNSHandler{zoneDirectory: zoneDirectory},
-		deletedIndexer: deletedIndexer,
+		logger:               log.NewEntry(log.New()),
+		clientset:            client,
+		zoneInformer:         zoneInformer,
+		zoneLister:           listers.NewZoneLister(zoneInformer.GetIndexer()),
+		recordInformer:       recordInformer,
+		recordLister:         listers.NewRecordLister(recordInformer.GetIndexer()),
+		queue:                queue,
+		zoneHandler:          &ZoneHandler{zoneDirectory: zoneDirectory},
+		recordHandler:        &RecordHandler{zoneDirectory: zoneDirectory},
+		zoneDeletedIndexer:   zoneDeletedIndexer,
+		recordDeletedIndexer: recordDeletedIndexer,
 	}
 
 	// use a channel to synchronize the finalization for a graceful shutdown

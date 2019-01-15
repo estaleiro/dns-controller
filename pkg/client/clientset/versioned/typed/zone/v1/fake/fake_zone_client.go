@@ -28,6 +28,10 @@ type FakeDnscontrollerV1 struct {
 	*testing.Fake
 }
 
+func (c *FakeDnscontrollerV1) Records(namespace string) v1.RecordInterface {
+	return &FakeRecords{c, namespace}
+}
+
 func (c *FakeDnscontrollerV1) Zones(namespace string) v1.ZoneInterface {
 	return &FakeZones{c, namespace}
 }

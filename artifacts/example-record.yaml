@@ -1,0 +1,10 @@
+apiVersion: dnscontroller.k8s.io/v1
+kind: Zone
+metadata:
+  name: example-registry
+spec:
+  registryName: example.com
+  type: 
+  tll: 43200
+  ip: 127.0.0.1
+
