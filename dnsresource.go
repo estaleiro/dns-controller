@@ -1,15 +1,16 @@
 package main
 
-// DnsResourceType defines if resource is Zone or Record
-type DnsResourceType int
+// DNSResourceType defines if resource is Zone or Record
+type DNSResourceType int
 
+// Defines DNSResource types
 const (
-	Zone   DnsResourceType = 0
-	Record DnsResourceType = 1
+	Zone   DNSResourceType = 0
+	Record DNSResourceType = 1
 )
 
-// DnsResource defines a resource
-type DnsResource struct {
+// DNSResource defines a resource
+type DNSResource struct {
 	Key  string
-	Type DnsResourceType
+	Type DNSResourceType
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"text/template"
-	"time"
 
 	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
 	log "github.com/sirupsen/logrus"
@@ -17,7 +16,7 @@ type Handler interface {
 	ObjectUpdated(objOld, objNew interface{})
 }
 
-// ZoneHandler is a sample implementation of Handler
+// ZoneHandler is a implementation of Handler for Zone
 type ZoneHandler struct {
 	zoneDirectory string
 }
@@ -36,19 +35,22 @@ func (t *ZoneHandler) ObjectCreated(obj interface{}) {
 	fileName := zone.GetNamespace() + "_" + zone.GetObjectMeta().GetName() + "_" + zone.Spec.ZoneName
 
 	zoneFile := t.zoneDirectory + "/" + fileName
-	// check if zone file exists and remove it
+	// check if zone file exists and exit
 	if _, err := os.Stat(zoneFile); !os.IsNotExist(err) {
-		err = os.Remove(zoneFile)
+		/*err = os.Remove(zoneFile)
 		log.Infof("deleting zone file: %v", zoneFile)
 		if err != nil {
 			log.Errorf("error deleting zone file: %v", err)
-		}
+		}*/
+		log.Errorf("zone file already exists: %v", zoneFile)
+		return
 	}
 
 	// then create a new empty file
 	file, err := os.Create(zoneFile)
 	if err != nil {
 		log.Errorf("error creating zone file: %v", err)
+		return
 	}
 
 	corednsTemplate, _ := template.ParseFiles("coredns.tmpl")
@@ -60,7 +62,7 @@ func (t *ZoneHandler) ObjectCreated(obj interface{}) {
 
 	defer file.Close()
 
-	log.Infof("%v - zone %s added", time.Now().Format("20060102150405"), zone.Spec.ZoneName)
+	log.Infof("zone file %s created", zoneFile)
 }
 
 // ObjectDeleted is called when an object is deleted
@@ -91,7 +93,7 @@ func (t *ZoneHandler) ObjectUpdated(objOld, objNew interface{}) {
 	log.Infof("zone %s updated", zone.Spec.ZoneName)
 }
 
-// RecordHandler is a sample implementation of Handler
+// RecordHandler is a implementation of Handler for Record
 type RecordHandler struct {
 	zoneDirectory string
 }

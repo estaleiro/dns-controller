@@ -50,12 +50,14 @@ func getKubernetesClient() (kubernetes.Interface, zoneclientset.Interface, recor
 }
 
 func main() {
-	// get the Kubernetes client for connectivity
+	var zoneDirectory string
+	flagSet := flag.NewFlagSetWithEnvPrefix(os.Args[0], "COREDNS", 0)
+	flagSet.StringVar(&zoneDirectory, "zone_dir", "/tmp/zones/", "coredns zones directory path")
+	flagSet.Parse(os.Args[1:])
+	log.Infof("zone_dir: %s", zoneDirectory)
+
 	client, zoneClient, recordClient := getKubernetesClient()
 
-	// retrieve our custom resource informer which was generated from
-	// the code generator and pass it the custom resource client, specifying
-	// we should be looking through all namespaces for listing and watching
 	zoneInformer := zoneinformerv1.NewZoneInformer(
 		zoneClient,
 		metav1.NamespaceAll,
@@ -70,86 +72,61 @@ func main() {
 		cache.Indexers{},
 	)
 
-	// create a new queue so that when the informer gets a resource that is either
-	// a result of listing or watching, we can add an idenfitying key to the queue
-	// so that it can be handled in the handler
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
-
-	zoneDeletedIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
-
-	zoneInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			// convert the resource object into a key (in this case
-			// we are just doing it in the format of 'namespace/name')
-			key, err := cache.MetaNamespaceKeyFunc(obj)
-			log.Infof("Add zone: %s", key)
-			if err == nil {
-				// add the key to the queue for the handler to get
-				queue.Add(DnsResource{Key: key, Type: Zone})
-			}
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			key, err := cache.MetaNamespaceKeyFunc(newObj)
-			log.Infof("Update zone: %s", key)
-			if err == nil {
-				queue.Add(DnsResource{Key: key, Type: Zone})
-			}
-		},
-		DeleteFunc: func(obj interface{}) {
-			// DeletionHandlingMetaNamsespaceKeyFunc is a helper function that allows
-			// us to check the DeletedFinalStateUnknown existence in the event that
-			// a resource was deleted but it is still contained in the index
-			//
-			// this then in turn calls MetaNamespaceKeyFunc
-			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
-			log.Infof("Delete zone: %s", key)
-			if err == nil {
-				zoneDeletedIndexer.Add(obj)
-				queue.Add(DnsResource{Key: key, Type: Zone})
-			}
-		},
-	})
 
 	recordDeletedIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
 
+	zoneDeletedIndexer := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+
 	recordInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			// convert the resource object into a key (in this case
-			// we are just doing it in the format of 'namespace/name')
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			log.Infof("Add record: %s", key)
 			if err == nil {
-				queue.Add(DnsResource{Key: key, Type: Record})
+				queue.Add(DNSResource{Key: key, Type: Record})
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(newObj)
 			log.Infof("Update record: %s", key)
 			if err == nil {
-				queue.Add(DnsResource{Key: key, Type: Record})
+				queue.Add(DNSResource{Key: key, Type: Record})
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			// DeletionHandlingMetaNamsespaceKeyFunc is a helper function that allows
-			// us to check the DeletedFinalStateUnknown existence in the event that
-			// a resource was deleted but it is still contained in the index
-			//
-			// this then in turn calls MetaNamespaceKeyFunc
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			log.Infof("Delete record: %s", key)
 			if err == nil {
 				recordDeletedIndexer.Add(obj)
-				queue.Add(DnsResource{Key: key, Type: Record})
+				queue.Add(DNSResource{Key: key, Type: Record})
 			}
 		},
 	})
 
-	// Get zone directory
-	var zoneDirectory string
-	flagSet := flag.NewFlagSetWithEnvPrefix(os.Args[0], "COREDNS", 0)
-	flagSet.StringVar(&zoneDirectory, "zone_dir", "/tmp/zones/", "coredns zones directory path")
-	flagSet.Parse(os.Args[1:])
-	log.Infof("zone_dir: %s", zoneDirectory)
+	zoneInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			key, err := cache.MetaNamespaceKeyFunc(obj)
+			log.Infof("Add zone: %s", key)
+			if err == nil {
+				queue.Add(DNSResource{Key: key, Type: Zone})
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			key, err := cache.MetaNamespaceKeyFunc(newObj)
+			log.Infof("Update zone: %s", key)
+			if err == nil {
+				queue.Add(DNSResource{Key: key, Type: Zone})
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+			log.Infof("Delete zone: %s", key)
+			if err == nil {
+				zoneDeletedIndexer.Add(obj)
+				queue.Add(DNSResource{Key: key, Type: Zone})
+			}
+		},
+	})
 
 	controller := Controller{
 		logger:               log.NewEntry(log.New()),
@@ -165,15 +142,11 @@ func main() {
 		recordDeletedIndexer: recordDeletedIndexer,
 	}
 
-	// use a channel to synchronize the finalization for a graceful shutdown
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	// run the controller loop to process items
 	go controller.Run(stopCh)
 
-	// use a channel to handle OS signals to terminate and gracefully shut
-	// down processing
 	sigTerm := make(chan os.Signal, 1)
 	signal.Notify(sigTerm, syscall.SIGTERM)
 	signal.Notify(sigTerm, syscall.SIGINT)
