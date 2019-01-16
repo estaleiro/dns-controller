@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path"
 	"text/template"
 
 	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
@@ -34,15 +35,16 @@ func (t *ZoneHandler) ObjectCreated(obj interface{}) {
 	// namespace_object_zone
 	fileName := zone.GetNamespace() + "_" + zone.GetObjectMeta().GetName() + "_" + zone.Spec.ZoneName
 
-	zoneFile := t.zoneDirectory + "/" + fileName
+	zoneFile := path.Clean(t.zoneDirectory + "/" + fileName)
+
 	// check if zone file exists and exit
 	if _, err := os.Stat(zoneFile); !os.IsNotExist(err) {
-		/*err = os.Remove(zoneFile)
+		err = os.Remove(zoneFile)
 		log.Infof("deleting zone file: %v", zoneFile)
 		if err != nil {
 			log.Errorf("error deleting zone file: %v", err)
-		}*/
-		log.Errorf("zone file already exists: %v", zoneFile)
+		}
+		log.Infof("zone file already exists: %v, recreating", zoneFile)
 		return
 	}
 
@@ -69,7 +71,7 @@ func (t *ZoneHandler) ObjectCreated(obj interface{}) {
 func (t *ZoneHandler) ObjectDeleted(obj interface{}) {
 	zone := obj.(*v1.Zone)
 
-	zoneFile := t.zoneDirectory + "/" + zone.Spec.ZoneName
+	zoneFile := path.Clean(t.zoneDirectory + "/" + zone.Spec.ZoneName)
 
 	// check if zone file exists and remove it
 	if _, err := os.Stat(zoneFile); !os.IsNotExist(err) {
