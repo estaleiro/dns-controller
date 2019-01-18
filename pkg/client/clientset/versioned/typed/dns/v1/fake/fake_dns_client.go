@@ -19,26 +19,26 @@ limitations under the License.
 package fake
 
 import (
-	v1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/zone/v1"
+	v1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/dns/v1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )
 
-type FakeDnscontrollerV1 struct {
+type FakeEstaleiroV1 struct {
 	*testing.Fake
 }
 
-func (c *FakeDnscontrollerV1) Records(namespace string) v1.RecordInterface {
-	return &FakeRecords{c, namespace}
+func (c *FakeEstaleiroV1) DNSRecords(namespace string) v1.DNSRecordInterface {
+	return &FakeDNSRecords{c, namespace}
 }
 
-func (c *FakeDnscontrollerV1) Zones(namespace string) v1.ZoneInterface {
-	return &FakeZones{c, namespace}
+func (c *FakeEstaleiroV1) DNSZones(namespace string) v1.DNSZoneInterface {
+	return &FakeDNSZones{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *FakeDnscontrollerV1) RESTClient() rest.Interface {
+func (c *FakeEstaleiroV1) RESTClient() rest.Interface {
 	var ret *rest.RESTClient
 	return ret
 }

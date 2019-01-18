@@ -1,4 +1,4 @@
 // +k8s:deepcopy-gen=package
-// +groupName=dnscontroller.k8s.io
+// +groupName=estaleiro.io
 
 package v1

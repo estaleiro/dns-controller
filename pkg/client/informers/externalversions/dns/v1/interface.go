@@ -24,10 +24,10 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
-	// Records returns a RecordInformer.
-	Records() RecordInformer
-	// Zones returns a ZoneInformer.
-	Zones() ZoneInformer
+	// DNSRecords returns a DNSRecordInformer.
+	DNSRecords() DNSRecordInformer
+	// DNSZones returns a DNSZoneInformer.
+	DNSZones() DNSZoneInformer
 }
 
 type version struct {
@@ -41,12 +41,12 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// Records returns a RecordInformer.
-func (v *version) Records() RecordInformer {
-	return &recordInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+// DNSRecords returns a DNSRecordInformer.
+func (v *version) DNSRecords() DNSRecordInformer {
+	return &dNSRecordInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// Zones returns a ZoneInformer.
-func (v *version) Zones() ZoneInformer {
-	return &zoneInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+// DNSZones returns a DNSZoneInformer.
+func (v *version) DNSZones() DNSZoneInformer {
+	return &dNSZoneInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

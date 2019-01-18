@@ -19,33 +19,33 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
+	v1 "github.com/estaleiro/dns-controller/pkg/apis/dns/v1"
 	"github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/scheme"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	rest "k8s.io/client-go/rest"
 )
 
-type DnscontrollerV1Interface interface {
+type EstaleiroV1Interface interface {
 	RESTClient() rest.Interface
-	RecordsGetter
-	ZonesGetter
+	DNSRecordsGetter
+	DNSZonesGetter
 }
 
-// DnscontrollerV1Client is used to interact with features provided by the dnscontroller.k8s.io group.
-type DnscontrollerV1Client struct {
+// EstaleiroV1Client is used to interact with features provided by the estaleiro.io group.
+type EstaleiroV1Client struct {
 	restClient rest.Interface
 }
 
-func (c *DnscontrollerV1Client) Records(namespace string) RecordInterface {
-	return newRecords(c, namespace)
+func (c *EstaleiroV1Client) DNSRecords(namespace string) DNSRecordInterface {
+	return newDNSRecords(c, namespace)
 }
 
-func (c *DnscontrollerV1Client) Zones(namespace string) ZoneInterface {
-	return newZones(c, namespace)
+func (c *EstaleiroV1Client) DNSZones(namespace string) DNSZoneInterface {
+	return newDNSZones(c, namespace)
 }
 
-// NewForConfig creates a new DnscontrollerV1Client for the given config.
-func NewForConfig(c *rest.Config) (*DnscontrollerV1Client, error) {
+// NewForConfig creates a new EstaleiroV1Client for the given config.
+func NewForConfig(c *rest.Config) (*EstaleiroV1Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
@@ -54,12 +54,12 @@ func NewForConfig(c *rest.Config) (*DnscontrollerV1Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DnscontrollerV1Client{client}, nil
+	return &EstaleiroV1Client{client}, nil
 }
 
-// NewForConfigOrDie creates a new DnscontrollerV1Client for the given config and
+// NewForConfigOrDie creates a new EstaleiroV1Client for the given config and
 // panics if there is an error in the config.
-func NewForConfigOrDie(c *rest.Config) *DnscontrollerV1Client {
+func NewForConfigOrDie(c *rest.Config) *EstaleiroV1Client {
 	client, err := NewForConfig(c)
 	if err != nil {
 		panic(err)
@@ -67,9 +67,9 @@ func NewForConfigOrDie(c *rest.Config) *DnscontrollerV1Client {
 	return client
 }
 
-// New creates a new DnscontrollerV1Client for the given RESTClient.
-func New(c rest.Interface) *DnscontrollerV1Client {
-	return &DnscontrollerV1Client{c}
+// New creates a new EstaleiroV1Client for the given RESTClient.
+func New(c rest.Interface) *EstaleiroV1Client {
+	return &EstaleiroV1Client{c}
 }
 
 func setConfigDefaults(config *rest.Config) error {
@@ -87,7 +87,7 @@ func setConfigDefaults(config *rest.Config) error {
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *DnscontrollerV1Client) RESTClient() rest.Interface {
+func (c *EstaleiroV1Client) RESTClient() rest.Interface {
 	if c == nil {
 		return nil
 	}

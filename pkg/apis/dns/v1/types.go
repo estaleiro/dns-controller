@@ -8,57 +8,60 @@ import (
 // +genclient:noStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Zone describes a Zone resource
-type Zone struct {
+// DNSZone describes a DNSZone resource
+type DNSZone struct {
 	// TypeMeta is the metadata for the resource, like kind and apiversion
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// Spec is the custom resource spec
-	Spec ZoneSpec `json:"spec"`
+	Spec DNSZoneSpec `json:"spec"`
 }
 
-// ZoneSpec is the spec for a Zone resource
-type ZoneSpec struct {
+// DNSZoneSpec is the spec for a DNSZone resource
+type DNSZoneSpec struct {
 	ZoneName string `json:"zoneName"`
+	Refresh int `json:"refresh"`
+	Retry int `json:"retry"`
+	Expire int `json:"expire"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ZoneList is a list of Zone resources
-type ZoneList struct {
+// DNSZoneList is a list of DNSZone resources
+type DNSZoneList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 
-	Items []Zone `json:"items"`
+	Items []DNSZone `json:"items"`
 }
 
 // +genclient
 // +genclient:noStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Record describes a Record resource
-type Record struct {
+// DNSRecord describes a DNSRecord resource
+type DNSRecord struct {
         // TypeMeta is the metadata for the resource, like kind and apiversion
         metav1.TypeMeta   `json:",inline"`
         metav1.ObjectMeta `json:"metadata,omitempty"`
 
         // Spec is the custom resource spec
-        Spec RecordSpec `json:"spec"`
+        Spec DNSRecordSpec `json:"spec"`
 }
 
-// RecordSpec is the spec for a Record resource
-type RecordSpec struct {
+// DNSRecordSpec is the spec for a DNSRecord resource
+type DNSRecordSpec struct {
         ZoneName string `json:"zoneName"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RecordList is a list of Record resources
-type RecordList struct {
+// DNSRecordList is a list of Record resources
+type DNSRecordList struct {
         metav1.TypeMeta `json:",inline"`
         metav1.ListMeta `json:"metadata"`
 
-        Items []Record `json:"items"`
+        Items []DNSRecord `json:"items"`
 }
 

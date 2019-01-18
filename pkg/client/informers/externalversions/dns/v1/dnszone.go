@@ -21,69 +21,69 @@ package v1
 import (
 	time "time"
 
-	zonev1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
+	dnsv1 "github.com/estaleiro/dns-controller/pkg/apis/dns/v1"
 	versioned "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/estaleiro/dns-controller/pkg/client/informers/externalversions/internalinterfaces"
-	v1 "github.com/estaleiro/dns-controller/pkg/client/listers/zone/v1"
+	v1 "github.com/estaleiro/dns-controller/pkg/client/listers/dns/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
 )
 
-// RecordInformer provides access to a shared informer and lister for
-// Records.
-type RecordInformer interface {
+// DNSZoneInformer provides access to a shared informer and lister for
+// DNSZones.
+type DNSZoneInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.RecordLister
+	Lister() v1.DNSZoneLister
 }
 
-type recordInformer struct {
+type dNSZoneInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
 }
 
-// NewRecordInformer constructs a new informer for Record type.
+// NewDNSZoneInformer constructs a new informer for DNSZone type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewRecordInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredRecordInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewDNSZoneInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredDNSZoneInformer(client, namespace, resyncPeriod, indexers, nil)
 }
 
-// NewFilteredRecordInformer constructs a new informer for Record type.
+// NewFilteredDNSZoneInformer constructs a new informer for DNSZone type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredRecordInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredDNSZoneInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.DnscontrollerV1().Records(namespace).List(options)
+				return client.EstaleiroV1().DNSZones(namespace).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.DnscontrollerV1().Records(namespace).Watch(options)
+				return client.EstaleiroV1().DNSZones(namespace).Watch(options)
 			},
 		},
-		&zonev1.Record{},
+		&dnsv1.DNSZone{},
 		resyncPeriod,
 		indexers,
 	)
 }
 
-func (f *recordInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredRecordInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+func (f *dNSZoneInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredDNSZoneInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *recordInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&zonev1.Record{}, f.defaultInformer)
+func (f *dNSZoneInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&dnsv1.DNSZone{}, f.defaultInformer)
 }
 
-func (f *recordInformer) Lister() v1.RecordLister {
-	return v1.NewRecordLister(f.Informer().GetIndexer())
+func (f *dNSZoneInformer) Lister() v1.DNSZoneLister {
+	return v1.NewDNSZoneLister(f.Informer().GetIndexer())
 }

@@ -21,7 +21,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
+	v1 "github.com/estaleiro/dns-controller/pkg/apis/dns/v1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -52,11 +52,11 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=dnscontroller.k8s.io, Version=v1
-	case v1.SchemeGroupVersion.WithResource("records"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Dnscontroller().V1().Records().Informer()}, nil
-	case v1.SchemeGroupVersion.WithResource("zones"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Dnscontroller().V1().Zones().Informer()}, nil
+	// Group=estaleiro.io, Version=v1
+	case v1.SchemeGroupVersion.WithResource("dnsrecords"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Estaleiro().V1().DNSRecords().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("dnszones"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Estaleiro().V1().DNSZones().Informer()}, nil
 
 	}
 

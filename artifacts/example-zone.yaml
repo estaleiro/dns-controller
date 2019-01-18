@@ -1,6 +1,8 @@
-apiVersion: dnscontroller.k8s.io/v1
-kind: Zone
+apiVersion: estaleiro.io/v1
+kind: DNSZone
 metadata:
-  name: example5
+  name: example.com
 spec:
-  zoneName: example3.com
+  refresh: 123
+  retry: 123
+  expire: 123

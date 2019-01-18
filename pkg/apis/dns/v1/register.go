@@ -5,13 +5,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/estaleiro/dns-controller/pkg/apis/zone"
+	"github.com/estaleiro/dns-controller/pkg/apis/dns"
 )
 
 // GroupVersion is the identifier for the API which includes
 // the name of the group and the version of the API
 var SchemeGroupVersion = schema.GroupVersion{
-	Group:   zone.GroupName,
+	Group:   dns.GroupName,
 	Version: "v1",
 }
 
@@ -31,10 +31,10 @@ func Resource(resource string) schema.GroupResource {
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(
 		SchemeGroupVersion,
-		&Zone{},
-		&ZoneList{},
-		&Record{},
-		&RecordList{},
+		&DNSZone{},
+		&DNSZoneList{},
+		&DNSRecord{},
+		&DNSRecordList{},
 	)
 
 	// register the type in the scheme

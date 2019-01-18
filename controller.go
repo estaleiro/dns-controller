@@ -6,9 +6,10 @@ import (
 
 	"k8s.io/apimachinery/pkg/labels"
 
-	v1 "github.com/estaleiro/dns-controller/pkg/apis/zone/v1"
-	listers "github.com/estaleiro/dns-controller/pkg/client/listers/zone/v1"
+	v1 "github.com/estaleiro/dns-controller/pkg/apis/dns/v1"
+	listers "github.com/estaleiro/dns-controller/pkg/client/listers/dns/v1"
 	log "github.com/sirupsen/logrus"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -22,9 +23,9 @@ type Controller struct {
 	clientset            kubernetes.Interface
 	queue                workqueue.RateLimitingInterface
 	zoneInformer         cache.SharedIndexInformer
-	zoneLister           listers.ZoneLister
+	zoneLister           listers.DNSZoneLister
 	recordInformer       cache.SharedIndexInformer
-	recordLister         listers.RecordLister
+	recordLister         listers.DNSRecordLister
 	zoneHandler          Handler
 	recordHandler        Handler
 	zoneDeletedIndexer   cache.Indexer
@@ -122,12 +123,6 @@ func (c *Controller) processNextItem() bool {
 func (c *Controller) syncZoneHandler(dnsResource DNSResource) error {
 	key := dnsResource.Key
 
-	namespace, _, err := cache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		c.queue.AddRateLimited(dnsResource)
-		return fmt.Errorf("invalid resource key %s", key)
-	}
-
 	zoneItem, zoneExists, err := c.zoneInformer.GetIndexer().GetByKey(key)
 	if err != nil {
 		if c.queue.NumRequeues(dnsResource) < 5 {
@@ -152,19 +147,25 @@ func (c *Controller) syncZoneHandler(dnsResource DNSResource) error {
 		c.zoneDeletedIndexer.Delete(key)
 		c.queue.Forget(dnsResource)
 	} else {
-		zoneReceived := zoneItem.(*v1.Zone)
+		zoneReceived := zoneItem.(*v1.DNSZone)
 		zoneToCreate := zoneReceived
 
 		// Get all the zones
-		zones, err := c.zoneLister.Zones(namespace).List(labels.Everything())
+		zones, err := c.zoneLister.DNSZones(meta.NamespaceAll).List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("failed processing item with key %s with error %v, no more retries", key, err)
 		}
 
-		// check if exists multiple crd asking to create same ZoneName
+		// check if exists multiples resource to same zone
+		// condition: same object name in another namespace
 		for _, zoneFound := range zones {
-			if zoneFound.Spec.ZoneName == zoneReceived.Spec.ZoneName && zoneFound.GetObjectMeta().GetName() != zoneReceived.GetObjectMeta().GetName() {
-				c.logger.Infof("Controller.syncZoneHandler: object %v found defined zoneName %v too", zoneFound.GetObjectMeta().GetName(), zoneToCreate.Spec.ZoneName)
+			zoneFoundObjectName := zoneFound.GetObjectMeta().GetName()
+			zoneFoundNamespace := zoneFound.GetNamespace()
+			zoneReceivedObjectName := zoneReceived.GetObjectMeta().GetName()
+			zoneReceivedNamespace := zoneReceived.GetNamespace()
+
+			if zoneFoundObjectName == zoneReceivedObjectName && zoneFoundNamespace != zoneReceivedNamespace {
+				c.logger.Infof("Controller.syncZoneHandler: same object %v in namespaces %v and %v", zoneFoundObjectName, zoneFoundNamespace, zoneReceivedNamespace)
 				// if we found a older crd
 				if zoneToCreate.GetCreationTimestamp().After(zoneFound.GetCreationTimestamp().Time) {
 					// then we use zoneFound
@@ -173,7 +174,7 @@ func (c *Controller) syncZoneHandler(dnsResource DNSResource) error {
 			}
 		}
 
-		c.logger.Infof("Controller.syncZoneHandler: object created detected: %v", zoneToCreate.GetObjectMeta().GetName())
+		c.logger.Infof("Controller.syncZoneHandler: object created detected: %v", zoneToCreate.GetNamespace()+"/"+zoneToCreate.GetObjectMeta().GetName())
 		c.zoneHandler.ObjectCreated(zoneToCreate)
 		c.queue.Forget(dnsResource)
 	}
@@ -215,9 +216,9 @@ func (c *Controller) syncRecordHandler(dnsResource DNSResource) error {
 		c.recordDeletedIndexer.Delete(key)
 		c.queue.Forget(dnsResource)
 	} else {
-		recordToCreate := recordItem.(*v1.Record)
+		recordToCreate := recordItem.(*v1.DNSRecord)
 
-		records, err := c.recordLister.Records(namespace).List(labels.Everything())
+		records, err := c.recordLister.DNSRecords(namespace).List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("failed processing item with key %s with error %v, no more retries", key, err)
 		}

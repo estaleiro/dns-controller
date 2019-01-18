@@ -19,7 +19,7 @@ limitations under the License.
 package versioned
 
 import (
-	dnscontrollerv1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/zone/v1"
+	estaleirov1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/dns/v1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -27,27 +27,27 @@ import (
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-	DnscontrollerV1() dnscontrollerv1.DnscontrollerV1Interface
+	EstaleiroV1() estaleirov1.EstaleiroV1Interface
 	// Deprecated: please explicitly pick a version if possible.
-	Dnscontroller() dnscontrollerv1.DnscontrollerV1Interface
+	Estaleiro() estaleirov1.EstaleiroV1Interface
 }
 
 // Clientset contains the clients for groups. Each group has exactly one
 // version included in a Clientset.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	dnscontrollerV1 *dnscontrollerv1.DnscontrollerV1Client
+	estaleiroV1 *estaleirov1.EstaleiroV1Client
 }
 
-// DnscontrollerV1 retrieves the DnscontrollerV1Client
-func (c *Clientset) DnscontrollerV1() dnscontrollerv1.DnscontrollerV1Interface {
-	return c.dnscontrollerV1
+// EstaleiroV1 retrieves the EstaleiroV1Client
+func (c *Clientset) EstaleiroV1() estaleirov1.EstaleiroV1Interface {
+	return c.estaleiroV1
 }
 
-// Deprecated: Dnscontroller retrieves the default version of DnscontrollerClient.
+// Deprecated: Estaleiro retrieves the default version of EstaleiroClient.
 // Please explicitly pick a version.
-func (c *Clientset) Dnscontroller() dnscontrollerv1.DnscontrollerV1Interface {
-	return c.dnscontrollerV1
+func (c *Clientset) Estaleiro() estaleirov1.EstaleiroV1Interface {
+	return c.estaleiroV1
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -66,7 +66,7 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 	}
 	var cs Clientset
 	var err error
-	cs.dnscontrollerV1, err = dnscontrollerv1.NewForConfig(&configShallowCopy)
+	cs.estaleiroV1, err = estaleirov1.NewForConfig(&configShallowCopy)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 // panics if there is an error in the config.
 func NewForConfigOrDie(c *rest.Config) *Clientset {
 	var cs Clientset
-	cs.dnscontrollerV1 = dnscontrollerv1.NewForConfigOrDie(c)
+	cs.estaleiroV1 = estaleirov1.NewForConfigOrDie(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClientForConfigOrDie(c)
 	return &cs
@@ -91,7 +91,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 // New creates a new Clientset for the given RESTClient.
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
-	cs.dnscontrollerV1 = dnscontrollerv1.New(c)
+	cs.estaleiroV1 = estaleirov1.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

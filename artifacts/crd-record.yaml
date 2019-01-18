@@ -1,11 +1,12 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: records.dnscontroller.k8s.io
+  name: dnsrecords.estaleiro.io
 spec:
-  group: dnscontroller.k8s.io
+  group: estaleiro.io
   version: v1
   names:
-    kind: Record
-    plural: records
+    kind: DNSRecord
+    plural: dnsrecords
+    singular: dnsrecord
   scope: Namespaced

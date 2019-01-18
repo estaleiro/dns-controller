@@ -14,11 +14,11 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	zoneclientset "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned"
-	zoneinformerv1 "github.com/estaleiro/dns-controller/pkg/client/informers/externalversions/zone/v1"
-	listers "github.com/estaleiro/dns-controller/pkg/client/listers/zone/v1"
+	zoneinformerv1 "github.com/estaleiro/dns-controller/pkg/client/informers/externalversions/dns/v1"
+	listers "github.com/estaleiro/dns-controller/pkg/client/listers/dns/v1"
 
 	recordclientset "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned"
-	recordinformerv1 "github.com/estaleiro/dns-controller/pkg/client/informers/externalversions/zone/v1"
+	recordinformerv1 "github.com/estaleiro/dns-controller/pkg/client/informers/externalversions/dns/v1"
 )
 
 // retrieve the Kubernetes cluster client from outside of the cluster
@@ -58,14 +58,14 @@ func main() {
 
 	client, zoneClient, recordClient := getKubernetesClient()
 
-	zoneInformer := zoneinformerv1.NewZoneInformer(
+	zoneInformer := zoneinformerv1.NewDNSZoneInformer(
 		zoneClient,
 		metav1.NamespaceAll,
 		0,
 		cache.Indexers{},
 	)
 
-	recordInformer := recordinformerv1.NewRecordInformer(
+	recordInformer := recordinformerv1.NewDNSRecordInformer(
 		recordClient,
 		metav1.NamespaceAll,
 		0,
@@ -132,9 +132,9 @@ func main() {
 		logger:               log.NewEntry(log.New()),
 		clientset:            client,
 		zoneInformer:         zoneInformer,
-		zoneLister:           listers.NewZoneLister(zoneInformer.GetIndexer()),
+		zoneLister:           listers.NewDNSZoneLister(zoneInformer.GetIndexer()),
 		recordInformer:       recordInformer,
-		recordLister:         listers.NewRecordLister(recordInformer.GetIndexer()),
+		recordLister:         listers.NewDNSRecordLister(recordInformer.GetIndexer()),
 		queue:                queue,
 		zoneHandler:          &ZoneHandler{zoneDirectory: zoneDirectory},
 		recordHandler:        &RecordHandler{zoneDirectory: zoneDirectory},

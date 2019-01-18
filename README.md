@@ -55,6 +55,6 @@ go get -u k8s.io/code-generator/...
 
 cd $GOPATH/src/k8s.io/code-generator/
 
-./generate-groups.sh all "github.com/estaleiro/dns-controller/pkg/client" "github.com/estaleiro/dns-controller/pkg/apis" "zone:v1"
+./generate-groups.sh all "github.com/estaleiro/dns-controller/pkg/client" "github.com/estaleiro/dns-controller/pkg/apis" "dns:v1"
 ```
 

@@ -20,8 +20,8 @@ package fake
 
 import (
 	clientset "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned"
-	dnscontrollerv1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/zone/v1"
-	fakednscontrollerv1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/zone/v1/fake"
+	estaleirov1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/dns/v1"
+	fakeestaleirov1 "github.com/estaleiro/dns-controller/pkg/client/clientset/versioned/typed/dns/v1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -71,12 +71,12 @@ func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 
 var _ clientset.Interface = &Clientset{}
 
-// DnscontrollerV1 retrieves the DnscontrollerV1Client
-func (c *Clientset) DnscontrollerV1() dnscontrollerv1.DnscontrollerV1Interface {
-	return &fakednscontrollerv1.FakeDnscontrollerV1{Fake: &c.Fake}
+// EstaleiroV1 retrieves the EstaleiroV1Client
+func (c *Clientset) EstaleiroV1() estaleirov1.EstaleiroV1Interface {
+	return &fakeestaleirov1.FakeEstaleiroV1{Fake: &c.Fake}
 }
 
-// Dnscontroller retrieves the DnscontrollerV1Client
-func (c *Clientset) Dnscontroller() dnscontrollerv1.DnscontrollerV1Interface {
-	return &fakednscontrollerv1.FakeDnscontrollerV1{Fake: &c.Fake}
+// Estaleiro retrieves the EstaleiroV1Client
+func (c *Clientset) Estaleiro() estaleirov1.EstaleiroV1Interface {
+	return &fakeestaleirov1.FakeEstaleiroV1{Fake: &c.Fake}
 }
